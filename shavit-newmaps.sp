@@ -1,6 +1,6 @@
+
 /* Header files */
 #include <shavit/rankings>
-#include <convar_class>
 
 /* Preprocessor directives */
 #pragma semicolon 1
@@ -14,8 +14,7 @@ ConVar gCV_MaxMapsToShow;
 public Plugin myinfo = 
 {
 	name = "Recently uploaded maps",
-	author = "Nairda",
-	/* Thank you so much, Deadwinter */
+	author = "Nairda - Fixed by Nora",
 	description = "Displays recently uploaded maps.",
 	url = "https://steamcommunity.com/id/nairda1339/"
 }
@@ -52,7 +51,7 @@ void NewMapsMenu(int client)
 	for (int i = 0; i < mapsToShow; i++)
 	{
 		MapInfo map;
-		gA_NewestMaps.GetArray(i, map);
+		gA_NewestMaps.GetArray(i, map, sizeof(map));
 
 		char time[32], display[255];
 		FormatTime(time, sizeof(time), "%Y/%m/%d %H:%M", map.TimeStamp);
@@ -83,28 +82,46 @@ public int Handler_NewestMaps(Menu menu, MenuAction action, int client, int choi
 void UpdateMapsList()
 {
 	gA_NewestMaps.Clear();
-	Handle dir = OpenDirectory("maps/");
+	DirectoryListing dir = OpenDirectory("maps/");
 
-	if (dir == INVALID_HANDLE)
+	if (dir == null)
 	{
 		PrintToServer("Failed to open maps directory.");
 		return;
 	}
 
 	char mapName[PLATFORM_MAX_PATH], path[PLATFORM_MAX_PATH];
+	FileType fileType;
 
-	while (ReadDirEntry(dir, mapName, sizeof(mapName)) && StrContains(mapName, ".bsp", false) != -1)
+	while (dir.GetNext(mapName, sizeof(mapName), fileType))
 	{
-		Format(path, sizeof(path), "maps/%s", mapName);
-		
-		MapInfo map;
-		map.TimeStamp = GetFileTime(path, FileTime_LastChange);
-		strcopy(map.MapName, sizeof(map.MapName), mapName);
-		ReplaceString(map.MapName, sizeof(map.MapName), ".bsp", "", false);
+		if (fileType == FileType_File && StrContains(mapName, ".bsp", false) != -1)
+		{
+			Format(path, sizeof(path), "maps/%s", mapName);
+			
+			MapInfo map;
+			map.TimeStamp = GetFileTime(path, FileTime_LastChange);
+			strcopy(map.MapName, sizeof(map.MapName), mapName);
+			ReplaceString(map.MapName, sizeof(map.MapName), ".bsp", "", false);
 
-		gA_NewestMaps.PushArray(map);
+			gA_NewestMaps.PushArray(map, sizeof(map));
+		}
 	}
 
-	CloseHandle(dir);
-	gA_NewestMaps.Sort(Sort_Descending, Sort_Integer);
+	delete dir;
+	gA_NewestMaps.SortCustom(SortByTimestamp);
+}
+
+public int SortByTimestamp(int index1, int index2, Handle array, Handle hndl)
+{
+	MapInfo map1, map2;
+	gA_NewestMaps.GetArray(index1, map1, sizeof(map1));
+	gA_NewestMaps.GetArray(index2, map2, sizeof(map2));
+
+	if (map1.TimeStamp > map2.TimeStamp)
+		return -1;
+	else if (map1.TimeStamp < map2.TimeStamp)
+		return 1;
+	else
+		return 0;
 }
